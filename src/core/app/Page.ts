@@ -15,6 +15,17 @@ export class Page extends EventEmitter {
   private page: puppeteer.Page;
   private url: string;
   private options: CLIOptions;
+  private previous = '';
+
+  private startTimer(msg: string) {
+    const timer = setTimeout(() => {
+      const e = new Error('Page Timeout ' + msg);
+      throw e;
+    }, 10000);
+    return {
+      stop: () => clearTimeout(timer),
+    };
+  }
 
   public constructor(
     page: puppeteer.Page,
@@ -53,6 +64,35 @@ export class Page extends EventEmitter {
     });
   }
 
+  private async gotoAndSelect(phase: string, query: object = {}) {
+    const q = {
+      ...query,
+      full: 1,
+      [PhaseIdentity]: phase
+    };
+
+    const url = `${this.url}?${qs.stringify(q)}`;
+
+    const timer = this.startTimer('goto');
+    if (this.previous && this.previous !== JSON.stringify(query)) {
+      await this.page.evaluate((query: any) => {
+        const api = (<any>window)['_api'];
+        const client  = (<any>window)['_client'];
+        api.setQueryParams(query);
+        api.selectStory(query.selectKind, query.selectStory);
+        client.run();
+        return !!(<any>window)['_api'];
+      }, q);
+    } else {
+      await this.page.goto(url, {
+        timeout: this.options.browserTimeout,
+        waitUntil: ['domcontentloaded', 'networkidle2']
+      });
+    }
+    timer.stop();
+    this.previous = query ? JSON.stringify(query) : '';
+  }
+
   public async screenshot(story: StoredStory) {
     const { cwd, outputDir, injectFiles } = this.options;
 
@@ -63,7 +103,7 @@ export class Page extends EventEmitter {
 
     await Promise.all([
       this.waitComponentReady(),
-      this.goto(PhaseTypes.CAPTURE, {
+      this.gotoAndSelect(PhaseTypes.CAPTURE, {
         selectKind: story.kind,
         selectStory: story.story,
         ...knobsQueryObject(story.knobs)
@@ -74,6 +114,7 @@ export class Page extends EventEmitter {
 
     const file = path.join(outputDir, story.filename);
 
+    const injectFileTimer = this.startTimer('injectFiles');
     await Promise.all(
       injectFiles.map((fpath) =>
         this.page.addScriptTag({
@@ -81,11 +122,14 @@ export class Page extends EventEmitter {
         })
       )
     );
+    injectFileTimer.stop();
 
+    const scTimer = this.startTimer('screenshot');
     await this.page.screenshot({
       path: path.resolve(cwd, file),
       fullPage: true
     });
+    scTimer.stop();
 
     return file;
   }
@@ -110,8 +154,12 @@ export class Page extends EventEmitter {
   }
 
   private waitComponentReady() {
+    const timer = this.startTimer('waitComponentReady');
     return new Promise((resolve) => {
-      this.once(EventTypes.COMPONENT_READY, resolve);
+      this.once(EventTypes.COMPONENT_READY, () => {
+        timer.stop();
+        resolve();
+      });
     });
   }
 }

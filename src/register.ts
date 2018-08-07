@@ -11,4 +11,7 @@ addons.register(pkg.name, (api) => {
   const gateway = new Gateway(appAdapter);
   const client = new Client(env, gateway, addons.getChannel(), api);
   client.run();
+  // TODO
+  (<any>window)._api = api;
+  (<any>window)._client = client;
 });

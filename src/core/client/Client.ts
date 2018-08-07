@@ -9,12 +9,29 @@ export class Client {
   private gateway: Gateway;
   private channel: Channel;
   private api: API;
+  private timer!: NodeJS.Timer;
 
   public constructor(env: Env, gateway: Gateway, channel: Channel, api: API) {
     this.env = env;
     this.gateway = gateway;
     this.channel = channel;
     this.api = api;
+  }
+
+  private timerStart(msg: string) {
+    this.timer = setTimeout(() => {
+      const e = new Error('Client Timeout ' + msg);
+      this.gateway.failure(e)
+    }, 3000);
+  }
+
+  private resetTimer() {
+    if (this.timer) clearTimeout(this.timer);
+  }
+
+  private restartTimer(msg: string) {
+    this.resetTimer();
+    this.timerStart(msg);
   }
 
   public run() {
@@ -50,10 +67,15 @@ export class Client {
     this.gateway.setStories(stories);
   }
 
-  private async capture() {
+  private capture() {
     this.channel.on(EventTypes.COMPONENT_READY, (story: StoryWithOptions) => {
       if (this.env.getKind() === story.kind && this.env.getStory() === story.story) {
+        this.restartTimer('After on COMPONENT_READY');
         const frame = <HTMLIFrameElement>document.querySelector('#storybook-preview-iframe');
+        if (!frame) {
+          this.gateway.failure(new Error('No preview frame'));
+          return;
+        }
         const contentDocument = <Document>frame.contentDocument;
 
         frame.style.width = `${contentDocument.documentElement.scrollWidth}px`;
@@ -63,10 +85,12 @@ export class Client {
         document.body.style.height = frame.style.height;
 
         this.gateway.readyComponent();
+        this.restartTimer('After gateway readyComponent');
       }
     });
 
     this.api.selectStory(this.env.getKind(), this.env.getStory());
+    this.restartTimer('After capture select');
   }
 
   private searchTargetStories(clientIndex: number, clientsCount: number) {
