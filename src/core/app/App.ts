@@ -61,7 +61,8 @@ export class App {
   }
 
   public async launch() {
-    this.terminal.section('green', PhaseTypes.LAUNCH, 'Launching storybook server ...').blank();
+    this.terminal.section('green', PhaseTypes.LAUNCH, 'Launching storybook server ...');
+    const dotId = setInterval(() => this.terminal.dot(), 400);
 
     await Promise.all([this.server.start(), Promise.all(this.browsers.map((b) => b.launch()))]);
 
@@ -72,12 +73,16 @@ export class App {
         })
       )
     );
+    clearInterval(dotId);
+    this.terminal.blank();
   }
 
   public prepare() {
-    this.terminal.section('cyan', PhaseTypes.PREPARE, 'Fetching the target components ...').blank();
+    this.terminal.section('cyan', PhaseTypes.PREPARE, 'Fetching the target components ...');
 
     mkdirp.sync(this.options.outputDir);
+
+    const dotId = setInterval(() => this.terminal.dot(), 400);
 
     return Promise.all(
       this.pages.map(
@@ -95,6 +100,8 @@ export class App {
           })
       )
     ).then((storiesList) => {
+      clearInterval(dotId);
+      this.terminal.blank();
       this.store.set(storiesList.reduce((acc, cur) => [...acc, ...cur], []));
     });
   }

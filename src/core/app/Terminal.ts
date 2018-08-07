@@ -35,6 +35,13 @@ export class Terminal {
     return this;
   }
 
+  public dot() {
+    if (!this.silent && this.ciMode) {
+      this.stdout.write('.');
+    }
+    return this;
+  }
+
   public log(title: string, ...args: {}[]) {
     if (this.debug) {
       this.echo(this.createTitle('blue', 'DEBUG'), chalk.blue(`[${title}]`), ...args);
